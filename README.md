@@ -6,6 +6,10 @@ A l'aide d'un IDE ou d'un terminal avec "python3 Server.py"
 Le serveur démarre et écoute sur le port 8080.
 Vous verrez une sortie indiquant quand le shellcode est servi, avec la clé et le payload chiffré.
 
+## Démarrer le prgramme cible
+
+Par défaut, lancez notepad.exe et laissez le en arroère plan
+
 ## Compiler et lancer le loader
 
 Ouvrez le projet dans Visual Studio.
