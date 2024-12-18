@@ -75,6 +75,36 @@ typedef struct _PEB {
     PPEB_LDR_DATA Ldr;
 } PEB, * PPEB;
 
+int MyStrCmp(const char* str1, const char* str2) {
+    while (*str1 && (*str1 == *str2)) {
+        str1++;
+        str2++;
+    }
+    return *(const unsigned char*)str1 - *(const unsigned char*)str2;
+}
+
+wchar_t ToLower(wchar_t c) {
+    if (c >= L'A' && c <= L'Z') {
+        return c + (L'a' - L'A');
+    }
+    return c;
+}
+
+int MyWcsICmp(const wchar_t* str1, const wchar_t* str2) {
+    while (*str1 && *str2) {
+        wchar_t c1 = ToLower(*str1);
+        wchar_t c2 = ToLower(*str2);
+
+        if (c1 != c2) {
+            return c1 - c2;
+        }
+
+        str1++;
+        str2++;
+    }
+    return *str1 - *str2;
+}
+
 PVOID GetModuleBaseAddress(const wchar_t* targetDllName) {
     // Get the PEB address
     PPEB pPeb = (PPEB)__readgsqword(0x60);
@@ -86,7 +116,7 @@ PVOID GetModuleBaseAddress(const wchar_t* targetDllName) {
     // Traverse the list of loaded DLLs
     while (pDte != (PLDR_DATA_TABLE_ENTRY)&pLdr->InMemoryOrderModuleList) {
         // Compare the DLL name (case-insensitive)
-        if (_wcsicmp(pDte->BaseDllName.Buffer, targetDllName) == 0) {
+        if (MyWcsICmp(pDte->BaseDllName.Buffer, targetDllName) == 0) {
             return pDte->DllBase; // Return the base address if found
         }
 
@@ -169,7 +199,7 @@ PVOID GetProcAddressFromExportTable(PBYTE pPeBuffer, const char* functionName) {
         CHAR* pFunctionName = (CHAR*)(pPeBuffer + FunctionNameArray[i]);
 
         // Compare with the target function name
-        if (strcmp(pFunctionName, functionName) == 0) {
+        if (MyStrCmp(pFunctionName, functionName) == 0) {
             // Get the ordinal for this function
             WORD wFunctionOrdinal = FunctionOrdinalArray[i];
 
@@ -306,7 +336,7 @@ DWORD GetProcessIdByName(ChargeDLL* chargeDLL, const wchar_t* processName) {
     if (chargeDLL->pProcess32First(hSnapshot, &pe32)) {
         do {
             // Compare the process name
-            if (_wcsicmp(pe32.szExeFile, processName) == 0) {
+            if (MyWcsICmp(pe32.szExeFile, processName) == 0) {
                 // Found the process, return its PID
                 chargeDLL->pCloseHandle(hSnapshot);
                 return pe32.th32ProcessID;
